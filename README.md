@@ -1,0 +1,200 @@
+# Conversational Voice Agent — Live Monitoring & Warm Transfer
+
+A voice receptionist ("Riley") for a clinic, built on **LiveKit Agents**. It holds a natural
+conversation, books appointments via tool calls, streams everything to a **live monitoring
+dashboard** where a watcher can **take over** the call, performs a **warm transfer** to a human
+over **Twilio**, and produces a **post-call summary**.
+
+- **Backend** — Python, LiveKit Agents SDK. LLM: **Groq** (`llama-3.3-70b-versatile`),
+  STT: **Deepgram**, TTS: **ElevenLabs**, VAD: bundled Silero.
+- **Frontend** — Next.js 15 (App Router), React 19, TypeScript, Tailwind v4,
+  `@livekit/components-react` + `livekit-client`.
+- **Store** — SQLite (`availability`, `appointments`, `call_summaries`).
+
+```
+Caller (browser mic) ─┐
+                      ├─ LiveKit room ── Agent A (Python worker) ── Groq / Deepgram / ElevenLabs
+Watcher (dashboard) ──┘        │                    │
+        ▲ attributes + data    │                    └─ tools: check_availability / book / lookup
+        │ (state, transcript,  │                          cancel / request_human
+        │  collected, summary) │
+        │ RPC: takeover/resume │
+                               └─ warm transfer ── Twilio SIP ── human agent's phone
+```
+
+---
+
+## 1. Prerequisites
+
+Create free accounts and grab keys:
+
+| Service | What you need | Where |
+|---|---|---|
+| LiveKit Cloud | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | https://cloud.livekit.io |
+| Groq | `GROQ_API_KEY` | https://console.groq.com/keys |
+| Deepgram | `DEEPGRAM_API_KEY` | https://console.deepgram.com |
+| ElevenLabs | `ELEVENLABS_API_KEY` | https://elevenlabs.io (Profile → API key) |
+| Twilio | account SID, auth token, a phone number, an Elastic SIP Trunk | https://twilio.com (for warm transfer only) |
+
+Also install the **LiveKit CLI** (`lk`) for the one-time SIP trunk setup: https://docs.livekit.io/home/cli/
+
+Booking, conversation, monitoring, and take-over all work **without Twilio**. Twilio is only
+required for the warm-transfer step.
+
+---
+
+## 2. Backend
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+cp .env.example .env        # then fill in your keys
+python seed.py              # populate the availability table (next 7 weekdays)
+```
+
+Run the agent worker (auto-dispatched to any room a caller joins):
+
+```bash
+python agent.py dev
+```
+
+Tip: test the agent with just your terminal mic (no frontend, no LiveKit room needed):
+
+```bash
+python agent.py console
+```
+
+### Environment (`backend/.env`)
+
+```
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+GROQ_API_KEY=...
+GROQ_MODEL=llama-3.3-70b-versatile
+DEEPGRAM_API_KEY=...
+ELEVENLABS_API_KEY=...
+# warm transfer (optional):
+SIP_OUTBOUND_TRUNK_ID=ST_...
+HUMAN_AGENT_PHONE_NUMBER=+1...
+```
+
+---
+
+## 3. Frontend
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local  # fill in the same LiveKit values
+npm run dev                 # http://localhost:3000
+```
+
+### Environment (`frontend/.env.local`)
+
+```
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
+```
+
+- **`/`** — caller view. Pick a room (default `clinic-demo`), click **Start call**, talk to Riley.
+- **`/monitor`** — monitoring dashboard. Enter the same room, click **Monitor call**.
+
+The `/api/token` route mints LiveKit access tokens with `livekit-server-sdk`. Caller identities are
+prefixed `caller-`, watcher identities `watcher-`.
+
+---
+
+## 4. Warm transfer setup (Twilio + LiveKit SIP)
+
+One-time setup to let the agent dial a real phone.
+
+1. **Twilio** → create an **Elastic SIP Trunk**. Under **Termination**, set a Termination SIP URI
+   (e.g. `your-trunk.pstn.twilio.com`) and add a **Credential List** (username/password). Make sure
+   a Twilio phone number is attached (used as caller ID).
+2. **LiveKit** → create an outbound trunk pointing at Twilio. Save this as `outbound-trunk.json`:
+
+   ```json
+   {
+     "trunk": {
+       "name": "twilio-outbound",
+       "address": "your-trunk.pstn.twilio.com",
+       "numbers": ["+1YOURTWILIONUMBER"],
+       "auth_username": "YOUR_TERMINATION_USERNAME",
+       "auth_password": "YOUR_TERMINATION_PASSWORD"
+     }
+   }
+   ```
+
+   ```bash
+   lk sip outbound create outbound-trunk.json   # prints SIPTrunkID = ST_xxxx
+   ```
+3. Put the id and the human's number in `backend/.env`:
+   `SIP_OUTBOUND_TRUNK_ID=ST_xxxx`, `HUMAN_AGENT_PHONE_NUMBER=+1...`.
+
+If these are unset, `request_human` tells the caller no human is available (graceful no-op).
+
+---
+
+## 5. How the flows work
+
+### Conversation & intent
+`backend/tools.py` defines `Assistant`, an `Agent` whose system prompt makes Riley collect booking
+details and decide intent (book / reschedule / cancel / lookup / human). `agent.py` wires Deepgram
+STT → Groq LLM → ElevenLabs TTS in an `AgentSession`. The detected intent is published live.
+
+### Appointment booking (tool calls)
+- `record_details` — saves any collected field as soon as it's known (drives the live "Collected
+  details" panel).
+- `check_availability(date, time?)` — reads open SQLite slots (`db.list_availability`).
+- `book_appointment(...)` — atomically books a slot (`db.book_slot`), returns a confirmation code,
+  and Riley reads it back. Bonus: `lookup_appointment`, `cancel_appointment`.
+
+### Live monitoring & take-over
+`backend/monitoring.py` publishes:
+- **participant attributes** — `state` (listening/thinking/speaking/paused/ended), `intent`,
+  `action` ("checking availability…", "booking…", "transferring…"), `status`
+  (connected→transferring→ended), and the collected `name`/`reason`/`datetime`/`phone`.
+- **data packets** on topic `monitor` — transcript segments (interim + final), lifecycle events,
+  and the final summary.
+
+The dashboard (`frontend/app/monitor/page.tsx`) subscribes via `RoomEvent.ParticipantAttributesChanged`
+and `RoomEvent.DataReceived` — no polling. **Take over** calls the agent's `takeover` RPC
+(`session.interrupt()` + disables the agent's audio input) and unmutes the watcher's mic, so the
+watcher talks directly to the caller. **Hand back** calls `resume`.
+
+### Warm transfer (Twilio)
+`backend/transfer.py`: Riley generates a short spoken handoff summary, dials the human into a private
+transfer room via `sip.create_sip_participant`, and a briefing agent reads the summary and asks if
+they can take it.
+- **Accept** → the human is moved into the caller's room (`room.move_participant`); Riley says
+  goodbye and leaves the two connected.
+- **Decline / no answer** → Riley returns to the caller: "the team isn't available right now."
+
+### Post-call summary
+When the caller hangs up (or after an accepted transfer), `agent.py` builds a transcript from
+`session.history`, asks Groq for a summary (`summary.py`), saves it to `call_summaries`, and pushes
+it to the dashboard.
+
+---
+
+## 6. Demo checklist
+
+1. **Book**: caller asks to book → Riley collects details → checks availability → confirms + reads back code.
+2. **Monitor**: `/monitor` shows transcript, state, intent, action, status, and collected details updating live.
+3. **Take over**: click **Take over** mid-call → agent pauses, you speak to the caller.
+4. **Warm transfer**: caller says "talk to a person" → human's phone rings → summary is spoken →
+   show both **accept** (connected) and **decline** (team unavailable).
+5. **Summary**: end the call → post-call summary appears on the dashboard.
+
+## Project structure
+
+```
+backend/   agent.py tools.py db.py monitoring.py summary.py transfer.py config.py seed.py
+frontend/  app/page.tsx  app/monitor/page.tsx  app/api/token/route.ts  lib/livekit.ts  components/MonitorPanels.tsx
+```
