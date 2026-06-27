@@ -112,30 +112,42 @@ prefixed `caller-`, watcher identities `watcher-`.
 
 ## 4. Warm transfer setup (Twilio + LiveKit SIP)
 
-One-time setup to let the agent dial a real phone.
+One-time setup to let the agent dial a real phone. Two values come out of this:
+`SIP_OUTBOUND_TRUNK_ID` (from LiveKit) and `HUMAN_AGENT_PHONE_NUMBER` (just the phone you want
+calls to land on — a cell phone, a teammate's number, whatever the "human agent" answers).
 
-1. **Twilio** → create an **Elastic SIP Trunk**. Under **Termination**, set a Termination SIP URI
-   (e.g. `your-trunk.pstn.twilio.com`) and add a **Credential List** (username/password). Make sure
-   a Twilio phone number is attached (used as caller ID).
-2. **LiveKit** → create an outbound trunk pointing at Twilio. Save this as `outbound-trunk.json`:
+1. **Twilio** → buy/use a phone number, then **Products & Services → Elastic SIP Trunking →
+   Trunks → Create new SIP trunk**.
+   - **Termination** tab → set a **Termination SIP URI**, e.g. `your-name.pstn.twilio.com`.
+   - **Voice → Credential Lists** → create a credential list (pick a username/password), then
+     attach it to the trunk's Termination tab under **Authentication**.
+   - Attach your Twilio number to the trunk — this becomes the **caller ID** the human sees, not
+     the number being dialed.
+2. **Install the LiveKit CLI**: `brew install livekit-cli` (or see
+   [docs.livekit.io/home/cli](https://docs.livekit.io/home/cli/)), then `lk cloud auth` to log in to
+   your project.
+3. **Create the LiveKit outbound trunk** pointing at Twilio. Save as `outbound-trunk.json`:
 
    ```json
    {
      "trunk": {
        "name": "twilio-outbound",
-       "address": "your-trunk.pstn.twilio.com",
-       "numbers": ["+1YOURTWILIONUMBER"],
-       "auth_username": "YOUR_TERMINATION_USERNAME",
-       "auth_password": "YOUR_TERMINATION_PASSWORD"
+       "address": "your-name.pstn.twilio.com",
+       "numbers": ["+1YOURTWILIONUMBER"]
      }
    }
    ```
 
    ```bash
-   lk sip outbound create outbound-trunk.json   # prints SIPTrunkID = ST_xxxx
+   lk sip outbound create outbound-trunk.json \
+     --auth-user "YOUR_CREDENTIAL_LIST_USERNAME" \
+     --auth-pass "YOUR_CREDENTIAL_LIST_PASSWORD"
+   # prints: SIPTrunkID: ST_xxxx
    ```
-3. Put the id and the human's number in `backend/.env`:
-   `SIP_OUTBOUND_TRUNK_ID=ST_xxxx`, `HUMAN_AGENT_PHONE_NUMBER=+1...`.
+4. Put both values in `backend/.env`:
+   - `SIP_OUTBOUND_TRUNK_ID=ST_xxxx` (printed above)
+   - `HUMAN_AGENT_PHONE_NUMBER=+1...` — the number to ring (E.164). This is **not** the Twilio
+     number from step 1 — that's the caller ID. This is whoever should pick up.
 
 If these are unset, `request_human` tells the caller no human is available (graceful no-op).
 
