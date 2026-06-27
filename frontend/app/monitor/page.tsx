@@ -168,27 +168,27 @@ export default function MonitorPage() {
   if (phase !== "live") {
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900/60 p-8">
-          <h1 className="text-2xl font-semibold">Live monitoring</h1>
-          <p className="mt-1 text-neutral-400">Watch an ongoing call and take over if needed.</p>
+        <div className="w-full max-w-md rounded-2xl border border-violet-100 bg-white/90 p-8 shadow-sm">
+          <h1 className="text-2xl font-semibold text-slate-800">Live monitoring</h1>
+          <p className="mt-1 text-slate-500">Watch an ongoing call and take over if needed.</p>
 
-          <label className="mt-6 block text-sm text-neutral-400">Room to monitor</label>
+          <label className="mt-6 block text-sm text-slate-500">Room to monitor</label>
           <input
             value={roomName}
             onChange={(e) => setRoomName(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 outline-none focus:border-neutral-500"
+            className="mt-1 w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-slate-700 outline-none focus:border-violet-400"
           />
 
           <button
             onClick={connect}
             disabled={phase === "connecting" || !roomName}
-            className="mt-6 w-full rounded-lg bg-sky-600 px-4 py-3 font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+            className="mt-6 w-full rounded-lg bg-sky-200 px-4 py-3 font-medium text-sky-900 hover:bg-sky-300 disabled:opacity-50"
           >
             {phase === "connecting" ? "Connecting…" : "Monitor call"}
           </button>
-          {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+          {error && <p className="mt-3 text-sm text-rose-500">{error}</p>}
 
-          <Link href="/" className="mt-4 block text-center text-sm text-neutral-400 underline hover:text-neutral-200">
+          <Link href="/" className="mt-4 block text-center text-sm text-slate-400 underline hover:text-slate-600">
             ← Back to caller
           </Link>
         </div>
@@ -201,10 +201,10 @@ export default function MonitorPage() {
       <div ref={audioRef} className="hidden" />
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">Monitoring · {roomName}</h1>
+          <h1 className="text-xl font-semibold text-slate-800">Monitoring · {roomName}</h1>
           <StatusBadge status={attrs.status} />
           {takenOver && (
-            <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300">
+            <span className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700">
               You are in control
             </span>
           )}
@@ -214,21 +214,21 @@ export default function MonitorPage() {
             <button
               onClick={takeover}
               disabled={!agentIdRef.current || attrs.status === "ended"}
-              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-40"
+              className="rounded-lg bg-amber-200 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-300 disabled:opacity-40"
             >
               Take over
             </button>
           ) : (
             <button
               onClick={handBack}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+              className="rounded-lg bg-emerald-200 px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-300"
             >
               Hand back to agent
             </button>
           )}
           <button
             onClick={disconnect}
-            className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-300 hover:bg-neutral-800"
+            className="rounded-lg border border-violet-200 px-4 py-2 text-sm text-slate-600 hover:bg-violet-50"
           >
             Leave
           </button>
@@ -248,7 +248,7 @@ export default function MonitorPage() {
       </div>
 
       {connState !== ConnectionState.Connected && (
-        <p className="mt-3 text-sm text-neutral-500">Connection: {connState}</p>
+        <p className="mt-3 text-sm text-slate-400">Connection: {connState}</p>
       )}
     </main>
   );
