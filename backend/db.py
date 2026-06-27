@@ -1,4 +1,12 @@
-"""SQLite store for availability, appointments, and call summaries."""
+"""SQLite store for availability, appointments, and call summaries.
+
+Each LiveKit agent worker process handles several concurrent calls on one asyncio
+event loop, so every query here runs in a worker thread via asyncio.to_thread —
+a blocking sqlite3 call on the event loop would stall audio for every other
+concurrent call on the same process. WAL mode + a busy timeout let concurrent
+worker processes read/write the same file without "database is locked" errors.
+"""
+import asyncio
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -41,6 +49,8 @@ CREATE TABLE IF NOT EXISTS call_summaries (
 def _conn():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     try:
         yield conn
         conn.commit()
@@ -48,13 +58,12 @@ def _conn():
         conn.close()
 
 
-def init_db() -> None:
+def _init_db() -> None:
     with _conn() as c:
         c.executescript(SCHEMA)
 
 
-def list_availability(date: str, time: Optional[str] = None) -> list[dict]:
-    """Return open (un-booked) slots for a date, optionally near a specific time."""
+def _list_availability(date: str, time: Optional[str] = None) -> list[dict]:
     with _conn() as c:
         if time:
             rows = c.execute(
@@ -71,7 +80,7 @@ def list_availability(date: str, time: Optional[str] = None) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def is_slot_open(date: str, time: str) -> bool:
+def _is_slot_open(date: str, time: str) -> bool:
     with _conn() as c:
         row = c.execute(
             "SELECT is_booked FROM availability WHERE date=? AND time=?",
@@ -80,8 +89,7 @@ def is_slot_open(date: str, time: str) -> bool:
         return row is not None and row["is_booked"] == 0
 
 
-def book_slot(name: str, reason: str, date: str, time: str, phone: str) -> Optional[str]:
-    """Atomically book a slot. Returns confirmation id, or None if slot unavailable."""
+def _book_slot(name: str, reason: str, date: str, time: str, phone: str) -> Optional[str]:
     appt_id = uuid.uuid4().hex[:8].upper()
     with _conn() as c:
         cur = c.execute(
@@ -98,7 +106,7 @@ def book_slot(name: str, reason: str, date: str, time: str, phone: str) -> Optio
     return appt_id
 
 
-def lookup_appointment(phone: str) -> Optional[dict]:
+def _lookup_appointment(phone: str) -> Optional[dict]:
     with _conn() as c:
         row = c.execute(
             "SELECT * FROM appointments WHERE phone=? AND status='booked' "
@@ -108,7 +116,7 @@ def lookup_appointment(phone: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def cancel_appointment(appt_id: str) -> bool:
+def _cancel_appointment(appt_id: str) -> bool:
     with _conn() as c:
         row = c.execute("SELECT date, time FROM appointments WHERE id=? AND status='booked'", (appt_id,)).fetchone()
         if not row:
@@ -118,7 +126,7 @@ def cancel_appointment(appt_id: str) -> bool:
         return True
 
 
-def save_summary(room: str, summary: str, outcome: str = "") -> str:
+def _save_summary(room: str, summary: str, outcome: str = "") -> str:
     sid = uuid.uuid4().hex[:8].upper()
     with _conn() as c:
         c.execute(
@@ -126,3 +134,33 @@ def save_summary(room: str, summary: str, outcome: str = "") -> str:
             (sid, room, summary, outcome, datetime.utcnow().isoformat()),
         )
     return sid
+
+
+async def init_db() -> None:
+    await asyncio.to_thread(_init_db)
+
+
+async def list_availability(date: str, time: Optional[str] = None) -> list[dict]:
+    """Return open (un-booked) slots for a date, optionally near a specific time."""
+    return await asyncio.to_thread(_list_availability, date, time)
+
+
+async def is_slot_open(date: str, time: str) -> bool:
+    return await asyncio.to_thread(_is_slot_open, date, time)
+
+
+async def book_slot(name: str, reason: str, date: str, time: str, phone: str) -> Optional[str]:
+    """Atomically book a slot. Returns confirmation id, or None if slot unavailable."""
+    return await asyncio.to_thread(_book_slot, name, reason, date, time, phone)
+
+
+async def lookup_appointment(phone: str) -> Optional[dict]:
+    return await asyncio.to_thread(_lookup_appointment, phone)
+
+
+async def cancel_appointment(appt_id: str) -> bool:
+    return await asyncio.to_thread(_cancel_appointment, appt_id)
+
+
+async def save_summary(room: str, summary: str, outcome: str = "") -> str:
+    return await asyncio.to_thread(_save_summary, room, summary, outcome)

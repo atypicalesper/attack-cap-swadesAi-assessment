@@ -20,7 +20,7 @@ logger = logging.getLogger("agent")
 
 
 async def entrypoint(ctx: agents.JobContext) -> None:
-    db.init_db()
+    await db.init_db()
     await ctx.connect()
 
     monitor = Monitor(ctx.room)
@@ -45,7 +45,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             text = await generate_summary(transcript, outcome)
         except Exception as e:  # noqa: BLE001
             text = f"(summary unavailable: {e})"
-        db.save_summary(ctx.room.name, text, outcome)
+        await db.save_summary(ctx.room.name, text, outcome)
         await monitor.summary(text, outcome)
 
     data.request_transfer = make_transfer_handler(ctx, session, monitor, end_call)

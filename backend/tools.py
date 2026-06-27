@@ -89,7 +89,7 @@ class Assistant(Agent):
         mon = context.userdata.monitor
         await mon.set(intent="book", action="checking availability...")
         await mon.event("tool", f"check_availability {date} {time or ''}".strip())
-        slots = db.list_availability(date, time)
+        slots = await db.list_availability(date, time)
         await mon.set(action="")
         if not slots:
             return f"No open slots on {date}. Suggest another day."
@@ -113,7 +113,7 @@ class Assistant(Agent):
         await mon.set_collected(name=name, reason=reason, datetime=f"{date} {time}", phone=phone)
         await mon.set(intent="book", action="booking...")
         await mon.event("tool", f"book_appointment {date} {time}")
-        appt_id = db.book_slot(name, reason, date, time, phone)
+        appt_id = await db.book_slot(name, reason, date, time, phone)
         await mon.set(action="")
         if not appt_id:
             return f"That slot ({date} {time}) was just taken. Ask the caller to pick another."
@@ -127,7 +127,7 @@ class Assistant(Agent):
     async def lookup_appointment(self, context: RunContext[CallData], phone: str) -> str:
         """Look up the caller's most recent active appointment by phone number."""
         await context.userdata.monitor.set(intent="lookup", action="looking up...")
-        appt = db.lookup_appointment(phone)
+        appt = await db.lookup_appointment(phone)
         await context.userdata.monitor.set(action="")
         if not appt:
             return "No active appointment found for that number."
@@ -140,7 +140,7 @@ class Assistant(Agent):
     async def cancel_appointment(self, context: RunContext[CallData], confirmation_id: str) -> str:
         """Cancel an appointment by its confirmation code and free the slot."""
         await context.userdata.monitor.set(intent="cancel", action="cancelling...")
-        ok = db.cancel_appointment(confirmation_id.strip().upper())
+        ok = await db.cancel_appointment(confirmation_id.strip().upper())
         await context.userdata.monitor.set(action="")
         return "Cancelled and the slot is freed." if ok else "I couldn't find that confirmation code."
 

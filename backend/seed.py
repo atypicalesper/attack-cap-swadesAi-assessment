@@ -2,6 +2,7 @@
 
 Run:  python seed.py
 """
+import asyncio
 from datetime import date, timedelta
 
 from config import DB_PATH
@@ -12,7 +13,7 @@ DAYS_AHEAD = 7
 
 
 def seed() -> None:
-    init_db()
+    asyncio.run(init_db())
     today = date.today()
     inserted = 0
     with _conn() as c:
