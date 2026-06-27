@@ -33,7 +33,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         tts=elevenlabs.TTS(api_key=config.ELEVENLABS_API_KEY),
     )
 
-    state = {"ended": False, "caller": None}
+    state = {"ended": False, "caller": None, "takenover": False}
 
     async def end_call(outcome: str = "") -> None:
         if state["ended"]:
@@ -53,7 +53,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     # --- monitoring: state + transcript ---
     @session.on("agent_state_changed")
     def _on_state(ev) -> None:
-        if not state["ended"]:
+        if not state["ended"] and not state["takenover"]:
             asyncio.create_task(monitor.set(state=ev.new_state))
 
     @session.on("conversation_item_added")
@@ -70,6 +70,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
     # --- take-over RPC from the monitoring dashboard ---
     async def _takeover(_data: rtc.RpcInvocationData) -> str:
+        state["takenover"] = True
         session.interrupt()
         session.input.set_audio_enabled(False)
         await monitor.set(state="paused", action="watcher in control")
@@ -77,6 +78,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         return "ok"
 
     async def _resume(_data: rtc.RpcInvocationData) -> str:
+        state["takenover"] = False
         session.input.set_audio_enabled(True)
         await monitor.set(state="listening", action="")
         await monitor.event("resume", "agent resumed")

@@ -12,7 +12,7 @@ import time
 from typing import Awaitable, Callable
 
 from livekit import api, rtc
-from livekit.agents import Agent, AgentSession, JobContext, RunContext, StopResponse, function_tool
+from livekit.agents import Agent, AgentSession, JobContext, RunContext, function_tool
 from livekit.plugins import deepgram, elevenlabs, groq
 
 import config
@@ -67,7 +67,6 @@ def make_transfer_handler(
             stt=deepgram.STT(api_key=config.DEEPGRAM_API_KEY, model="nova-2-phonecall"),
             llm=groq.LLM(api_key=config.GROQ_API_KEY, model=config.GROQ_MODEL),
             tts=elevenlabs.TTS(api_key=config.ELEVENLABS_API_KEY),
-            vad=silero.VAD.load(),
         )
 
         accepted = False
