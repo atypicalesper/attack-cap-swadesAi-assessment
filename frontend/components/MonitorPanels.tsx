@@ -50,6 +50,31 @@ export const STATE_LABEL: Record<string, string> = {
   connecting: "Connecting",
 };
 
+const BAR_COLOR: Record<string, string> = {
+  listening: "bg-sky-400",
+  thinking: "bg-violet-400",
+  speaking: "bg-emerald-400",
+  paused: "bg-amber-400",
+  ended: "bg-slate-300",
+  connecting: "bg-slate-300",
+};
+
+export function VoiceWave({ state }: { state: string }) {
+  const active = state === "listening" || state === "thinking" || state === "speaking";
+  const color = BAR_COLOR[state] ?? "bg-slate-300";
+  return (
+    <div className="flex h-7 items-end justify-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <span
+          key={i}
+          className={`w-1.5 rounded-full ${color} ${active ? "voice-bar" : "h-1.5"}`}
+          style={active ? { animationDelay: `${i * 0.12}s` } : undefined}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function AgentStatePanel({ attrs }: { attrs: AgentAttributes }) {
   const dot = STATE_STYLE[attrs.state] ?? "text-slate-400";
   const active = attrs.state === "listening" || attrs.state === "thinking" || attrs.state === "speaking";

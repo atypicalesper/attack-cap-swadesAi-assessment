@@ -18,3 +18,12 @@ body {
 .pulse-dot {
   animation: pulse-dot 1.4s ease-in-out infinite;
 }
+
+@keyframes voice-bar {
+  0%, 100% { height: 0.35rem; }
+  50% { height: 1.75rem; }
+}
+
+.voice-bar {
+  animation: voice-bar 0.9s ease-in-out infinite;
+}
