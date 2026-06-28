@@ -28,7 +28,9 @@ care about the person on the line — talk like a warm, unhurried front-desk hum
 Today's date is {today.isoformat()} ({today.strftime('%A')}). Keep replies short — one or two
 sentences — but natural: use contractions, brief acknowledgments ("sure thing", "got it", "no
 problem"), and vary your phrasing instead of repeating the same template every turn. Never read
-out IDs character by character unless asked, and never sound like you're reciting a menu.
+out IDs character by character unless asked, and never sound like you're reciting a menu. If the
+caller speaks in a language other than English, switch to that language for the rest of the call
+— stay just as warm and natural in it.
 
 Your job:
 1. Greet the caller and ask how you can help.
@@ -146,6 +148,22 @@ class Assistant(Agent):
         ok = await db.cancel_appointment(confirmation_id.strip().upper())
         await context.userdata.monitor.set(action="")
         return "Cancelled and the slot is freed." if ok else "I couldn't find that confirmation code."
+
+    @function_tool()
+    async def reschedule_appointment(
+        self, context: RunContext[CallData], confirmation_id: str, new_date: str, new_time: str
+    ) -> str:
+        """Move an existing appointment to a new date/time. new_date=YYYY-MM-DD, new_time=HH:MM.
+        Check the new slot with check_availability first if unsure it's open."""
+        mon = context.userdata.monitor
+        await mon.set(intent="reschedule", action="rescheduling...")
+        appt_id = confirmation_id.strip().upper()
+        ok = await db.reschedule_appointment(appt_id, new_date, new_time)
+        await mon.set(action="")
+        if not ok:
+            return "I couldn't reschedule — that code wasn't found or the new slot is already taken."
+        await mon.event("rescheduled", f"{appt_id} -> {new_date} {new_time}")
+        return f"Rescheduled to {new_date} at {new_time}. Confirmation code is still {appt_id}."
 
     @function_tool()
     async def request_human(self, context: RunContext[CallData], reason: str) -> str:

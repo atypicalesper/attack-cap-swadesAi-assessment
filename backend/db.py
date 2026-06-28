@@ -126,6 +126,28 @@ def _cancel_appointment(appt_id: str) -> bool:
         return True
 
 
+def _reschedule_appointment(appt_id: str, new_date: str, new_time: str) -> Optional[str]:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT date, time FROM appointments WHERE id=? AND status='booked'", (appt_id,)
+        ).fetchone()
+        if not row:
+            return None
+        if (row["date"], row["time"]) != (new_date, new_time):
+            cur = c.execute(
+                "UPDATE availability SET is_booked=1 WHERE date=? AND time=? AND is_booked=0",
+                (new_date, new_time),
+            )
+            if cur.rowcount == 0:
+                return None
+            c.execute(
+                "UPDATE availability SET is_booked=0 WHERE date=? AND time=?",
+                (row["date"], row["time"]),
+            )
+        c.execute("UPDATE appointments SET date=?, time=? WHERE id=?", (new_date, new_time, appt_id))
+        return appt_id
+
+
 def _save_summary(room: str, summary: str, outcome: str = "") -> str:
     sid = uuid.uuid4().hex[:8].upper()
     with _conn() as c:
@@ -160,6 +182,11 @@ async def lookup_appointment(phone: str) -> Optional[dict]:
 
 async def cancel_appointment(appt_id: str) -> bool:
     return await asyncio.to_thread(_cancel_appointment, appt_id)
+
+
+async def reschedule_appointment(appt_id: str, new_date: str, new_time: str) -> Optional[str]:
+    """Move a booked appointment to a new date/time. Returns the same id, or None if not found / new slot taken."""
+    return await asyncio.to_thread(_reschedule_appointment, appt_id, new_date, new_time)
 
 
 async def save_summary(room: str, summary: str, outcome: str = "") -> str:
