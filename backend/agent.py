@@ -28,7 +28,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
     session = AgentSession(
         userdata=data,
-        stt=deepgram.STT(api_key=config.DEEPGRAM_API_KEY, model="nova-2"),
+        stt=deepgram.STT(api_key=config.DEEPGRAM_API_KEY, model="nova-3", language="multi"),
         llm=groq.LLM(api_key=config.GROQ_API_KEY, model=config.GROQ_MODEL),
         tts=elevenlabs.TTS(api_key=config.ELEVENLABS_API_KEY),
     )
