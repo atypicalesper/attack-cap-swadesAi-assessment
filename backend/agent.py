@@ -118,7 +118,10 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     await session.start(room=ctx.room, agent=Assistant(), room_input_options=RoomInputOptions())
     await monitor.set(state="listening", status="connected", action="")
     await session.generate_reply(
-        instructions="Greet the caller warmly as Riley from Northside Health Clinic and ask how you can help."
+        instructions=(
+            "Greet the caller warmly as Agent A from Northside Health Clinic, in a natural, "
+            "friendly tone — not a scripted-sounding intro — and ask how you can help."
+        )
     )
 
 

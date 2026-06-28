@@ -1,6 +1,6 @@
 # Conversational Voice Agent — Live Monitoring & Warm Transfer
 
-A voice receptionist ("Riley") for a clinic, built on **LiveKit Agents**. It holds a natural
+A voice receptionist ("Agent A") for a clinic, built on **LiveKit Agents**. It holds a natural
 conversation, books appointments via tool calls, streams everything to a **live monitoring
 dashboard** where a watcher can **take over** the call, performs a **warm transfer** to a human
 over **Twilio**, and produces a **post-call summary**.
@@ -102,7 +102,7 @@ LIVEKIT_API_SECRET=...
 NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
 ```
 
-- **`/`** — caller view. Pick a room (default `clinic-demo`), click **Start call**, talk to Riley.
+- **`/`** — caller view. Pick a room (default `clinic-demo`), click **Start call**, talk to Agent A.
 - **`/monitor`** — monitoring dashboard. Enter the same room, click **Monitor call**.
 
 The `/api/token` route mints LiveKit access tokens with `livekit-server-sdk`. Caller identities are
@@ -156,7 +156,7 @@ If these are unset, `request_human` tells the caller no human is available (grac
 ## 5. How the flows work
 
 ### Conversation & intent
-`backend/tools.py` defines `Assistant`, an `Agent` whose system prompt makes Riley collect booking
+`backend/tools.py` defines `Assistant`, an `Agent` whose system prompt makes Agent A collect booking
 details and decide intent (book / reschedule / cancel / lookup / human). `agent.py` wires Deepgram
 STT → Groq LLM → ElevenLabs TTS in an `AgentSession`. The detected intent is published live.
 
@@ -165,7 +165,7 @@ STT → Groq LLM → ElevenLabs TTS in an `AgentSession`. The detected intent is
   details" panel).
 - `check_availability(date, time?)` — reads open SQLite slots (`db.list_availability`).
 - `book_appointment(...)` — atomically books a slot (`db.book_slot`), returns a confirmation code,
-  and Riley reads it back. Bonus: `lookup_appointment`, `cancel_appointment`.
+  and Agent A reads it back. Bonus: `lookup_appointment`, `cancel_appointment`.
 
 ### Live monitoring & take-over
 `backend/monitoring.py` publishes:
@@ -181,12 +181,12 @@ and `RoomEvent.DataReceived` — no polling. **Take over** calls the agent's `ta
 watcher talks directly to the caller. **Hand back** calls `resume`.
 
 ### Warm transfer (Twilio)
-`backend/transfer.py`: Riley generates a short spoken handoff summary, dials the human into a private
+`backend/transfer.py`: Agent A generates a short spoken handoff summary, dials the human into a private
 transfer room via `sip.create_sip_participant`, and a briefing agent reads the summary and asks if
 they can take it.
-- **Accept** → the human is moved into the caller's room (`room.move_participant`); Riley says
+- **Accept** → the human is moved into the caller's room (`room.move_participant`); Agent A says
   goodbye and leaves the two connected.
-- **Decline / no answer** → Riley returns to the caller: "the team isn't available right now."
+- **Decline / no answer** → Agent A returns to the caller: "the team isn't available right now."
 
 ### Post-call summary
 When the caller hangs up (or after an accepted transfer), `agent.py` builds a transcript from
@@ -197,7 +197,7 @@ it to the dashboard.
 
 ## 6. Demo checklist
 
-1. **Book**: caller asks to book → Riley collects details → checks availability → confirms + reads back code.
+1. **Book**: caller asks to book → Agent A collects details → checks availability → confirms + reads back code.
 2. **Monitor**: `/monitor` shows transcript, state, intent, action, status, and collected details updating live.
 3. **Take over**: click **Take over** mid-call → agent pauses, you speak to the caller.
 4. **Warm transfer**: caller says "talk to a person" → human's phone rings → summary is spoken →
