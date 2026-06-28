@@ -34,7 +34,7 @@ Create free accounts and grab keys:
 | Groq | `GROQ_API_KEY` | https://console.groq.com/keys |
 | Deepgram | `DEEPGRAM_API_KEY` | https://console.deepgram.com |
 | ElevenLabs | `ELEVENLABS_API_KEY` | https://elevenlabs.io (Profile → API key) |
-| Twilio | account SID, auth token, a phone number, an Elastic SIP Trunk | https://twilio.com (for warm transfer only) |
+| Twilio | a phone number + an Elastic SIP Trunk (Termination URI + Credential List). Account SID/auth token are only used inside the Twilio Console UI — nothing Twilio-specific is stored in `.env` | https://twilio.com (for warm transfer only) |
 
 Also install the **LiveKit CLI** (`lk`) for the one-time SIP trunk setup: https://docs.livekit.io/home/cli/
 
