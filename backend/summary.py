@@ -3,6 +3,10 @@ from groq import AsyncGroq
 
 from config import GROQ_API_KEY, GROQ_MODEL
 
+# Shared across every call this worker process handles concurrently, instead of
+# opening a fresh HTTP client per summary/handoff request.
+_client = AsyncGroq(api_key=GROQ_API_KEY)
+
 _SYS = (
     "You write concise post-call summaries for a clinic receptionist line. "
     "Given the transcript, produce 4-6 short bullet points covering: caller intent, "
@@ -35,9 +39,8 @@ _HANDOFF_SYS = (
 
 
 async def generate_handoff(transcript: str, reason: str) -> str:
-    client = AsyncGroq(api_key=GROQ_API_KEY)
     user = f"Reason for transfer: {reason}\n\nTranscript so far:\n{transcript or '(no transcript yet)'}"
-    resp = await client.chat.completions.create(
+    resp = await _client.chat.completions.create(
         model=GROQ_MODEL,
         temperature=0.3,
         messages=[{"role": "system", "content": _HANDOFF_SYS}, {"role": "user", "content": user}],
@@ -48,11 +51,10 @@ async def generate_handoff(transcript: str, reason: str) -> str:
 async def generate_summary(transcript: str, outcome: str = "") -> str:
     if not transcript.strip():
         return "No conversation took place."
-    client = AsyncGroq(api_key=GROQ_API_KEY)
     user = transcript
     if outcome:
         user += f"\n\n[Call outcome: {outcome}]"
-    resp = await client.chat.completions.create(
+    resp = await _client.chat.completions.create(
         model=GROQ_MODEL,
         temperature=0.2,
         messages=[{"role": "system", "content": _SYS}, {"role": "user", "content": user}],
