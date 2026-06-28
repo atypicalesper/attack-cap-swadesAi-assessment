@@ -204,6 +204,8 @@ it to the dashboard.
    show both **accept** (connected) and **decline** (team unavailable).
 5. **Summary**: end the call → post-call summary appears on the dashboard.
 
+**Demo video**: TODO — add link here.
+
 ## Project structure
 
 ```

@@ -5,7 +5,7 @@ Run the worker:   python agent.py dev
 import asyncio
 import logging
 
-from livekit import agents, rtc
+from livekit import agents, api, rtc
 from livekit.agents import AgentSession, RoomInputOptions
 from livekit.plugins import deepgram, elevenlabs, groq
 
@@ -28,8 +28,10 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
     session = AgentSession(
         userdata=data,
-        stt=deepgram.STT(api_key=config.DEEPGRAM_API_KEY, model="nova-3", language="multi"),
-        llm=groq.LLM(api_key=config.GROQ_API_KEY, model=config.GROQ_MODEL),
+        stt=deepgram.STT(api_key=config.DEEPGRAM_API_KEY, model="nova-3", language="en-IN"),
+        llm=groq.LLM(
+            api_key=config.GROQ_API_KEY, model=config.GROQ_MODEL, parallel_tool_calls=False
+        ),
         tts=elevenlabs.TTS(api_key=config.ELEVENLABS_API_KEY),
     )
 
@@ -105,7 +107,11 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         if p.identity == state["caller"] and not state["ended"]:
             async def _finish() -> None:
                 await end_call("caller hung up")
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(3)  # let the monitor render the final summary
+                try:
+                    await ctx.api.room.delete_room(api.DeleteRoomRequest(room=ctx.room.name))
+                except Exception:  # noqa: BLE001 - room may already be gone
+                    pass
                 await ctx.room.disconnect()
 
             asyncio.create_task(_finish())

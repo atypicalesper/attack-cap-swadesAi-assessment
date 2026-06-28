@@ -1,12 +1,28 @@
 """Agent A definition: the conversational assistant and its function tools."""
+import re
 from dataclasses import dataclass
 from datetime import date
-from typing import Awaitable, Callable, Optional
+from typing import AsyncIterable, Awaitable, Callable, Optional
 
-from livekit.agents import Agent, RunContext, StopResponse, function_tool
+from livekit.agents import (
+    Agent,
+    ModelSettings,
+    RunContext,
+    StopResponse,
+    function_tool,
+    llm,
+)
 
 import db
 from monitoring import Monitor
+
+# Some Llama models served via Groq echo their native tool-call syntax as plain
+# text alongside the real (structured) tool_calls entry, instead of leaving it
+# only in the structured field. Left alone, that raw text gets spoken by TTS and
+# shown in the transcript. Strip it defensively; the real tool_calls field
+# (handled separately by the framework) is untouched by this filter.
+_LEAKED_FUNCTION_TAG = re.compile(r"<function=.*?</function>", re.DOTALL)
+_LEAKED_FUNCTION_TAG_OPEN = re.compile(r"<function=")
 
 
 @dataclass
@@ -30,7 +46,8 @@ sentences — but natural: use contractions, brief acknowledgments ("sure thing"
 problem"), and vary your phrasing instead of repeating the same template every turn. Never read
 out IDs character by character unless asked, and never sound like you're reciting a menu. If the
 caller speaks in a language other than English, switch to that language for the rest of the call
-— stay just as warm and natural in it.
+— stay just as warm and natural in it. Call tools silently through the normal mechanism — never
+type out a tool/function call, its name, or its JSON arguments as part of your reply.
 
 Your job:
 1. Greet the caller and ask how you can help.
@@ -53,6 +70,30 @@ the tools."""
 class Assistant(Agent):
     def __init__(self) -> None:
         super().__init__(instructions=_instructions())
+
+    async def llm_node(
+        self, chat_ctx: llm.ChatContext, tools: list[llm.Tool], model_settings: ModelSettings
+    ) -> AsyncIterable[llm.ChatChunk]:
+        held = ""
+        last_id = "stream"
+        async for chunk in Agent.default.llm_node(self, chat_ctx, tools, model_settings):
+            if not isinstance(chunk, llm.ChatChunk) or chunk.delta is None:
+                yield chunk
+                continue
+            last_id = chunk.id
+            emit: Optional[str] = None
+            if chunk.delta.content:
+                held += chunk.delta.content
+                held = _LEAKED_FUNCTION_TAG.sub("", held)
+                match = _LEAKED_FUNCTION_TAG_OPEN.search(held)
+                if match:
+                    emit, held = held[: match.start()], held[match.start() :]
+                else:
+                    emit, held = held, ""
+            if emit or chunk.delta.tool_calls:
+                yield chunk.model_copy(update={"delta": chunk.delta.model_copy(update={"content": emit})})
+        if held and not _LEAKED_FUNCTION_TAG_OPEN.search(held):
+            yield llm.ChatChunk(id=last_id, delta=llm.ChoiceDelta(role="assistant", content=held))
 
     @function_tool()
     async def record_details(
